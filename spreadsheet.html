@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스프레드시트 편집기 - GoF 해석자 패턴</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+
+        .toolbar {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .formula-bar {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            gap: 10px;
+        }
+
+        .cell-reference {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .formula-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .formula-input:focus {
+            outline: none;
+            border-color: #1a73e8;
+        }
+
+        .spreadsheet-container {
+            background: white;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+            max-height: 500px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th, td {
+            border: 1px solid #e0e0e0;
+            min-width: 100px;
+            height: 30px;
+            text-align: center;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 500;
+            color: #5f6368;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th.row-header {
+            min-width: 50px;
+            position: sticky;
+            left: 0;
+            z-index: 11;
+        }
+
+        th.corner {
+            position: sticky;
+            top: 0;
+            left: 0;
+            z-index: 12;
+        }
+
+        td {
+            padding: 0;
+        }
+
+        td.row-header {
+            background: #f8f9fa;
+            font-weight: 500;
+            color: #5f6368;
+            position: sticky;
+            left: 0;
+        }
+
+        .cell {
+            width: 100%;
+            height: 100%;
+            padding: 5px 8px;
+            border: none;
+            text-align: right;
+            font-size: 13px;
+            background: transparent;
+        }
+
+        .cell:focus {
+            outline: 2px solid #1a73e8;
+            background: #e8f0fe;
+        }
+
+        .cell.selected {
+            background: #e8f0fe;
+        }
+
+        .cell.error {
+            color: red;
+        }
+
+        .help-section {
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .help-section h3 {
+            color: #1a73e8;
+            margin-bottom: 15px;
+        }
+
+        .help-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .help-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .help-item code {
+            background: #e8f0fe;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #1a73e8;
+        }
+
+        .help-item p {
+            margin-top: 5px;
+            color: #5f6368;
+            font-size: 13px;
+        }
+
+        .pattern-info {
+            margin-top: 20px;
+            background: #e8f0fe;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #1a73e8;
+        }
+
+        .pattern-info h3 {
+            color: #1a73e8;
+            margin-bottom: 10px;
+        }
+
+        .pattern-info p {
+            color: #333;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 스프레드시트 편집기</h1>
+
+        <div class="toolbar">
+            <div class="formula-bar">
+                <span class="cell-reference" id="cellRef">A1</span>
+                <input type="text" class="formula-input" id="formulaInput" placeholder="수식 입력 (예: =A1+B1, =SUM(A1:A5))">
+            </div>
+        </div>
+
+        <div class="spreadsheet-container">
+            <table id="spreadsheet">
+                <thead>
+                    <tr id="headerRow">
+                        <th class="corner"></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="help-section">
+            <h3>📝 사용 가능한 수식</h3>
+            <div class="help-grid">
+                <div class="help-item">
+                    <code>=A1+B1</code>
+                    <p>셀 참조 및 사칙연산 (+, -, *, /)</p>
+                </div>
+                <div class="help-item">
+                    <code>=SUM(A1:A5)</code>
+                    <p>범위 내 셀의 합계</p>
+                </div>
+                <div class="help-item">
+                    <code>=AVG(A1:B3)</code>
+                    <p>범위 내 셀의 평균</p>
+                </div>
+                <div class="help-item">
+                    <code>=MIN(A1:C3)</code>
+                    <p>범위 내 최소값</p>
+                </div>
+                <div class="help-item">
+                    <code>=MAX(A1:C3)</code>
+                    <p>범위 내 최대값</p>
+                </div>
+                <div class="help-item">
+                    <code>=COUNT(A1:A10)</code>
+                    <p>범위 내 숫자 셀 개수</p>
+                </div>
+                <div class="help-item">
+                    <code>=(A1+B1)*2</code>
+                    <p>괄호를 이용한 복잡한 수식</p>
+                </div>
+                <div class="help-item">
+                    <code>=A1*10+5</code>
+                    <p>숫자와 셀 참조 혼합</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="pattern-info">
+            <h3>🎯 GoF 해석자(Interpreter) 패턴</h3>
+            <p>
+                이 스프레드시트는 <strong>해석자 패턴</strong>을 사용하여 수식을 해석합니다.<br><br>
+                • <strong>AbstractExpression</strong>: 모든 표현식의 기본 인터페이스 (Expression 클래스)<br>
+                • <strong>TerminalExpression</strong>: 숫자(NumberExpression), 셀참조(CellReferenceExpression)<br>
+                • <strong>NonTerminalExpression</strong>: 이항연산(BinaryExpression), 함수(FunctionExpression)<br>
+                • <strong>Context</strong>: 셀 데이터를 저장하는 컨텍스트 (SpreadsheetContext)<br>
+                • <strong>Client</strong>: 수식을 파싱하고 AST를 구성 (FormulaParser)
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GoF 해석자(Interpreter) 패턴 구현
+        // ============================================
+
+        /**
+         * Context - 스프레드시트 컨텍스트
+         * 셀 데이터를 저장하고 관리합니다.
+         */
+        class SpreadsheetContext {
+            constructor() {
+                this.cells = new Map();
+                this.formulas = new Map();
+            }
+
+            setCellValue(cellRef, value) {
+                this.cells.set(cellRef.toUpperCase(), value);
+            }
+
+            getCellValue(cellRef) {
+                const value = this.cells.get(cellRef.toUpperCase());
+                if (value === undefined || value === '') return 0;
+                const num = parseFloat(value);
+                return isNaN(num) ? 0 : num;
+            }
+
+            setFormula(cellRef, formula) {
+                this.formulas.set(cellRef.toUpperCase(), formula);
+            }
+
+            getFormula(cellRef) {
+                return this.formulas.get(cellRef.toUpperCase());
+            }
+
+            getRawValue(cellRef) {
+                return this.cells.get(cellRef.toUpperCase()) || '';
+            }
+        }
+
+        /**
+         * AbstractExpression - 추상 표현식
+         * 모든 표현식의 기본 인터페이스
+         */
+        class Expression {
+            interpret(context) {
+                throw new Error('interpret() must be implemented');
+            }
+        }
+
+        /**
+         * TerminalExpression - 숫자 표현식
+         * 숫자 리터럴을 해석합니다.
+         */
+        class NumberExpression extends Expression {
+            constructor(value) {
+                super();
+                this.value = value;
+            }
+
+            interpret(context) {
+                return this.value;
+            }
+        }
+
+        /**
+         * TerminalExpression - 셀 참조 표현식
+         * 셀 참조(예: A1, B2)를 해석합니다.
+         */
+        class CellReferenceExpression extends Expression {
+            constructor(cellRef) {
+                super();
+                this.cellRef = cellRef.toUpperCase();
+            }
+
+            interpret(context) {
+                return context.getCellValue(this.cellRef);
+            }
+        }
+
+        /**
+         * NonTerminalExpression - 이항 연산 표현식
+         * 두 표현식 간의 연산을 수행합니다.
+         */
+        class BinaryExpression extends Expression {
+            constructor(left, operator, right) {
+                super();
+                this.left = left;
+                this.operator = operator;
+                this.right = right;
+            }
+
+            interpret(context) {
+                const leftValue = this.left.interpret(context);
+                const rightValue = this.right.interpret(context);
+
+                switch (this.operator) {
+                    case '+': return leftValue + rightValue;
+                    case '-': return leftValue - rightValue;
+                    case '*': return leftValue * rightValue;
+                    case '/':
+                        if (rightValue === 0) throw new Error('0으로 나눌 수 없습니다');
+                        return leftValue / rightValue;
+                    default:
+                        throw new Error(`알 수 없는 연산자: ${this.operator}`);
+                }
+            }
+        }
+
+        /**
+         * NonTerminalExpression - 함수 표현식
+         * SUM, AVG, MIN, MAX, COUNT 등의 함수를 해석합니다.
+         */
+        class FunctionExpression extends Expression {
+            constructor(functionName, rangeStart, rangeEnd) {
+                super();
+                this.functionName = functionName.toUpperCase();
+                this.rangeStart = rangeStart.toUpperCase();
+                this.rangeEnd = rangeEnd.toUpperCase();
+            }
+
+            // 범위 내의 모든 셀 참조를 가져옵니다
+            getCellsInRange() {
+                const cells = [];
+                const startCol = this.rangeStart.match(/[A-Z]+/)[0];
+                const startRow = parseInt(this.rangeStart.match(/\d+/)[0]);
+                const endCol = this.rangeEnd.match(/[A-Z]+/)[0];
+                const endRow = parseInt(this.rangeEnd.match(/\d+/)[0]);
+
+                const startColNum = this.colToNum(startCol);
+                const endColNum = this.colToNum(endCol);
+
+                for (let col = startColNum; col <= endColNum; col++) {
+                    for (let row = startRow; row <= endRow; row++) {
+                        cells.push(this.numToCol(col) + row);
+                    }
+                }
+
+                return cells;
+            }
+
+            colToNum(col) {
+                let num = 0;
+                for (let i = 0; i < col.length; i++) {
+                    num = num * 26 + (col.charCodeAt(i) - 64);
+                }
+                return num;
+            }
+
+            numToCol(num) {
+                let col = '';
+                while (num > 0) {
+                    num--;
+                    col = String.fromCharCode(65 + (num % 26)) + col;
+                    num = Math.floor(num / 26);
+                }
+                return col;
+            }
+
+            interpret(context) {
+                const cells = this.getCellsInRange();
+                const values = cells.map(cell => context.getCellValue(cell));
+
+                switch (this.functionName) {
+                    case 'SUM':
+                        return values.reduce((sum, val) => sum + val, 0);
+
+                    case 'AVG':
+                    case 'AVERAGE':
+                        if (values.length === 0) return 0;
+                        return values.reduce((sum, val) => sum + val, 0) / values.length;
+
+                    case 'MIN':
+                        if (values.length === 0) return 0;
+                        return Math.min(...values);
+
+                    case 'MAX':
+                        if (values.length === 0) return 0;
+                        return Math.max(...values);
+
+                    case 'COUNT':
+                        return values.filter(v => v !== 0).length;
+
+                    default:
+                        throw new Error(`알 수 없는 함수: ${this.functionName}`);
+                }
+            }
+        }
+
+        /**
+         * Client - 수식 파서
+         * 수식 문자열을 파싱하여 AST(추상 구문 트리)를 구성합니다.
+         */
+        class FormulaParser {
+            constructor(formula) {
+                this.formula = formula.trim();
+                this.pos = 0;
+            }
+
+            parse() {
+                if (!this.formula.startsWith('=')) {
+                    // 수식이 아닌 경우 숫자로 해석
+                    const num = parseFloat(this.formula);
+                    if (!isNaN(num)) {
+                        return new NumberExpression(num);
+                    }
+                    return null;
+                }
+
+                this.pos = 1; // '=' 건너뛰기
+                return this.parseExpression();
+            }
+
+            parseExpression() {
+                return this.parseAddSub();
+            }
+
+            parseAddSub() {
+                let left = this.parseMulDiv();
+
+                while (this.pos < this.formula.length) {
+                    this.skipWhitespace();
+                    const op = this.formula[this.pos];
+
+                    if (op === '+' || op === '-') {
+                        this.pos++;
+                        const right = this.parseMulDiv();
+                        left = new BinaryExpression(left, op, right);
+                    } else {
+                        break;
+                    }
+                }
+
+                return left;
+            }
+
+            parseMulDiv() {
+                let left = this.parsePrimary();
+
+                while (this.pos < this.formula.length) {
+                    this.skipWhitespace();
+                    const op = this.formula[this.pos];
+
+                    if (op === '*' || op === '/') {
+                        this.pos++;
+                        const right = this.parsePrimary();
+                        left = new BinaryExpression(left, op, right);
+                    } else {
+                        break;
+                    }
+                }
+
+                return left;
+            }
+
+            parsePrimary() {
+                this.skipWhitespace();
+
+                // 괄호 처리
+                if (this.formula[this.pos] === '(') {
+                    this.pos++;
+                    const expr = this.parseExpression();
+                    this.skipWhitespace();
+                    if (this.formula[this.pos] === ')') {
+                        this.pos++;
+                    }
+                    return expr;
+                }
+
+                // 음수 처리
+                if (this.formula[this.pos] === '-') {
+                    this.pos++;
+                    const expr = this.parsePrimary();
+                    return new BinaryExpression(new NumberExpression(0), '-', expr);
+                }
+
+                // 함수 처리 (SUM, AVG 등)
+                const funcMatch = this.formula.slice(this.pos).match(/^([A-Z]+)\s*\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/i);
+                if (funcMatch) {
+                    this.pos += funcMatch[0].length;
+                    return new FunctionExpression(funcMatch[1], funcMatch[2], funcMatch[3]);
+                }
+
+                // 셀 참조 처리
+                const cellMatch = this.formula.slice(this.pos).match(/^[A-Z]+\d+/i);
+                if (cellMatch) {
+                    this.pos += cellMatch[0].length;
+                    return new CellReferenceExpression(cellMatch[0]);
+                }
+
+                // 숫자 처리
+                const numMatch = this.formula.slice(this.pos).match(/^\d+\.?\d*/);
+                if (numMatch) {
+                    this.pos += numMatch[0].length;
+                    return new NumberExpression(parseFloat(numMatch[0]));
+                }
+
+                throw new Error(`파싱 오류: 위치 ${this.pos}`);
+            }
+
+            skipWhitespace() {
+                while (this.pos < this.formula.length && /\s/.test(this.formula[this.pos])) {
+                    this.pos++;
+                }
+            }
+        }
+
+        // ============================================
+        // 스프레드시트 UI 관리
+        // ============================================
+
+        class Spreadsheet {
+            constructor(rows = 20, cols = 10) {
+                this.rows = rows;
+                this.cols = cols;
+                this.context = new SpreadsheetContext();
+                this.selectedCell = null;
+                this.init();
+            }
+
+            init() {
+                this.createTable();
+                this.setupFormulaBar();
+            }
+
+            getColName(index) {
+                let name = '';
+                index++;
+                while (index > 0) {
+                    index--;
+                    name = String.fromCharCode(65 + (index % 26)) + name;
+                    index = Math.floor(index / 26);
+                }
+                return name;
+            }
+
+            createTable() {
+                const headerRow = document.getElementById('headerRow');
+                const tableBody = document.getElementById('tableBody');
+
+                // 헤더 생성
+                for (let col = 0; col < this.cols; col++) {
+                    const th = document.createElement('th');
+                    th.textContent = this.getColName(col);
+                    headerRow.appendChild(th);
+                }
+
+                // 셀 생성
+                for (let row = 1; row <= this.rows; row++) {
+                    const tr = document.createElement('tr');
+
+                    // 행 헤더
+                    const rowHeader = document.createElement('td');
+                    rowHeader.className = 'row-header';
+                    rowHeader.textContent = row;
+                    tr.appendChild(rowHeader);
+
+                    // 데이터 셀
+                    for (let col = 0; col < this.cols; col++) {
+                        const td = document.createElement('td');
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'cell';
+                        input.dataset.cellRef = this.getColName(col) + row;
+
+                        input.addEventListener('focus', (e) => this.onCellFocus(e));
+                        input.addEventListener('blur', (e) => this.onCellBlur(e));
+                        input.addEventListener('keydown', (e) => this.onCellKeydown(e));
+
+                        td.appendChild(input);
+                        tr.appendChild(td);
+                    }
+
+                    tableBody.appendChild(tr);
+                }
+            }
+
+            setupFormulaBar() {
+                const formulaInput = document.getElementById('formulaInput');
+
+                formulaInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && this.selectedCell) {
+                        const value = formulaInput.value;
+                        this.setCellValue(this.selectedCell, value);
+                        this.selectedCell.focus();
+                    }
+                });
+            }
+
+            onCellFocus(e) {
+                const cell = e.target;
+                const cellRef = cell.dataset.cellRef;
+
+                // 이전 선택 해제
+                if (this.selectedCell) {
+                    this.selectedCell.classList.remove('selected');
+                }
+
+                this.selectedCell = cell;
+                cell.classList.add('selected');
+
+                // 셀 참조 업데이트
+                document.getElementById('cellRef').textContent = cellRef;
+
+                // 수식 바에 원본 수식 또는 값 표시
+                const formula = this.context.getFormula(cellRef);
+                document.getElementById('formulaInput').value = formula || cell.value;
+            }
+
+            onCellBlur(e) {
+                const cell = e.target;
+                const value = cell.value;
+                this.setCellValue(cell, value);
+            }
+
+            onCellKeydown(e) {
+                const cell = e.target;
+
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const value = cell.value;
+                    this.setCellValue(cell, value);
+
+                    // 아래 셀로 이동
+                    const cellRef = cell.dataset.cellRef;
+                    const col = cellRef.match(/[A-Z]+/)[0];
+                    const row = parseInt(cellRef.match(/\d+/)[0]) + 1;
+                    if (row <= this.rows) {
+                        const nextCell = document.querySelector(`[data-cell-ref="${col}${row}"]`);
+                        if (nextCell) nextCell.focus();
+                    }
+                } else if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const value = cell.value;
+                    this.setCellValue(cell, value);
+
+                    // 오른쪽 셀로 이동
+                    const cellRef = cell.dataset.cellRef;
+                    const col = cellRef.match(/[A-Z]+/)[0];
+                    const row = parseInt(cellRef.match(/\d+/)[0]);
+                    const colNum = this.colToNum(col);
+                    if (colNum < this.cols) {
+                        const nextCell = document.querySelector(`[data-cell-ref="${this.numToCol(colNum + 1)}${row}"]`);
+                        if (nextCell) nextCell.focus();
+                    }
+                }
+            }
+
+            colToNum(col) {
+                let num = 0;
+                for (let i = 0; i < col.length; i++) {
+                    num = num * 26 + (col.charCodeAt(i) - 64);
+                }
+                return num;
+            }
+
+            numToCol(num) {
+                let col = '';
+                while (num > 0) {
+                    num--;
+                    col = String.fromCharCode(65 + (num % 26)) + col;
+                    num = Math.floor(num / 26);
+                }
+                return col;
+            }
+
+            setCellValue(cell, value) {
+                const cellRef = cell.dataset.cellRef;
+
+                // 수식 저장
+                if (value.startsWith('=')) {
+                    this.context.setFormula(cellRef, value);
+                } else {
+                    this.context.setFormula(cellRef, null);
+                }
+
+                try {
+                    // 해석자 패턴을 사용하여 수식 평가
+                    if (value.startsWith('=')) {
+                        const parser = new FormulaParser(value);
+                        const expression = parser.parse();
+
+                        if (expression) {
+                            const result = expression.interpret(this.context);
+                            this.context.setCellValue(cellRef, result);
+                            cell.value = this.formatNumber(result);
+                            cell.classList.remove('error');
+                        }
+                    } else {
+                        this.context.setCellValue(cellRef, value);
+                        cell.classList.remove('error');
+                    }
+
+                    // 의존성이 있는 셀 업데이트
+                    this.updateDependentCells();
+
+                } catch (error) {
+                    cell.value = '#ERROR!';
+                    cell.classList.add('error');
+                    console.error('수식 오류:', error.message);
+                }
+            }
+
+            formatNumber(num) {
+                if (Number.isInteger(num)) {
+                    return num.toString();
+                }
+                return num.toFixed(2);
+            }
+
+            updateDependentCells() {
+                // 모든 수식이 있는 셀을 다시 계산
+                const cells = document.querySelectorAll('.cell');
+                cells.forEach(cell => {
+                    const cellRef = cell.dataset.cellRef;
+                    const formula = this.context.getFormula(cellRef);
+
+                    if (formula && formula.startsWith('=')) {
+                        try {
+                            const parser = new FormulaParser(formula);
+                            const expression = parser.parse();
+
+                            if (expression) {
+                                const result = expression.interpret(this.context);
+                                this.context.setCellValue(cellRef, result);
+                                cell.value = this.formatNumber(result);
+                                cell.classList.remove('error');
+                            }
+                        } catch (error) {
+                            cell.value = '#ERROR!';
+                            cell.classList.add('error');
+                        }
+                    }
+                });
+            }
+        }
+
+        // 스프레드시트 초기화
+        const spreadsheet = new Spreadsheet(20, 10);
+
+        // 예제 데이터 추가
+        setTimeout(() => {
+            const exampleData = [
+                { cell: 'A1', value: '10' },
+                { cell: 'A2', value: '20' },
+                { cell: 'A3', value: '30' },
+                { cell: 'A4', value: '40' },
+                { cell: 'A5', value: '=SUM(A1:A4)' },
+                { cell: 'B1', value: '5' },
+                { cell: 'B2', value: '15' },
+                { cell: 'B3', value: '=A1+B1' },
+                { cell: 'B4', value: '=AVG(A1:A4)' },
+                { cell: 'C1', value: '=MAX(A1:A4)' },
+                { cell: 'C2', value: '=MIN(A1:A4)' },
+            ];
+
+            exampleData.forEach(data => {
+                const cell = document.querySelector(`[data-cell-ref="${data.cell}"]`);
+                if (cell) {
+                    cell.value = data.value;
+                    spreadsheet.setCellValue(cell, data.value);
+                }
+            });
+        }, 100);
+    </script>
+</body>
+</html>
